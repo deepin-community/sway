@@ -1,3 +1,12 @@
+sway (1.8.1-2) unstable; urgency=medium
+
+  * Upload to unstable (Closes: #1038794)
+  * Backport libinput fix from
+    https://github.com/swaywm/sway/commit/dee032d0a0ecd958c902b88302dc59703d703c7f
+    to make sway build with the newest libinput release
+
+ -- Birger Schacht <birger@debian.org>  Sun, 23 Jul 2023 17:25:27 +0200
+
 sway (1.8.1-1) experimental; urgency=medium
 
   * New upstream version
