@@ -1,3 +1,4 @@
 0001-Install-zsh-completions-into-the-correct-directory.patch
 0002-Modify-default-configuration-for-Debian.patch
-0003-backport-libinput-fix.patch
+0003-add-DesktopNames-to-sway.desktop.patch
+0004-feat-comment-default-output-setting.patch

@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -13,6 +12,7 @@
 #include "sway/config.h"
 #include "sway/input/keyboard.h"
 #include "sway/output.h"
+#include "sway/server.h"
 #include "config.h"
 #include "list.h"
 #include "log.h"
@@ -256,7 +256,6 @@ static void invoke_swaybar(struct bar_config *bar) {
 	}
 
 	sway_log(SWAY_DEBUG, "Spawned swaybar %s", bar->id);
-	return;
 }
 
 void load_swaybar(struct bar_config *bar) {

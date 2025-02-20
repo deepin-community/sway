@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
 #include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
@@ -12,6 +11,7 @@
 #include "sway/input/seat.h"
 #include "sway/ipc-server.h"
 #include "sway/output.h"
+#include "sway/server.h"
 #include "sway/tree/arrange.h"
 #include "sway/tree/container.h"
 #include "sway/tree/root.h"
@@ -206,9 +206,17 @@ static void container_move_to_workspace(struct sway_container *container,
 		container_detach(container);
 		workspace_add_floating(workspace, container);
 		container_handle_fullscreen_reparent(container);
-		// If changing output, center it within the workspace
+		// If changing output, adjust the coordinates of the window.
 		if (old_output != workspace->output && !container->pending.fullscreen_mode) {
-			container_floating_move_to_center(container);
+			struct wlr_box workspace_box, old_workspace_box;
+			workspace_get_box(workspace, &workspace_box);
+			workspace_get_box(old_workspace, &old_workspace_box);
+			floating_fix_coordinates(container, &old_workspace_box, &workspace_box);
+			if (container->scratchpad && workspace->output) {
+				struct wlr_box output_box;
+				output_get_box(workspace->output, &output_box);
+				container->transform = workspace_box;
+			}
 		}
 	} else {
 		container_detach(container);
@@ -232,7 +240,6 @@ static void container_move_to_workspace(struct sway_container *container,
 static void container_move_to_container(struct sway_container *container,
 		struct sway_container *destination) {
 	if (container == destination
-			|| container_has_ancestor(container, destination)
 			|| container_has_ancestor(destination, container)) {
 		return;
 	}
@@ -462,7 +469,7 @@ static struct cmd_results *cmd_move_container(bool no_auto_back_and_forth,
 			if (strcasecmp(argv[1], "number") == 0) {
 				// move [window|container] [to] "workspace number x"
 				if (argc < 3) {
-					return cmd_results_new(CMD_INVALID, expected_syntax);
+					return cmd_results_new(CMD_INVALID, "%s", expected_syntax);
 				}
 				if (!isdigit(argv[2][0])) {
 					return cmd_results_new(CMD_INVALID,
@@ -502,6 +509,7 @@ static struct cmd_results *cmd_move_container(bool no_auto_back_and_forth,
 				}
 			}
 			ws = workspace_create(NULL, ws_name);
+			arrange_workspace(ws);
 		}
 		free(ws_name);
 		struct sway_container *dst = seat_get_focus_inactive_tiling(seat, ws);
@@ -522,7 +530,7 @@ static struct cmd_results *cmd_move_container(bool no_auto_back_and_forth,
 		}
 		destination = &dest_con->node;
 	} else {
-		return cmd_results_new(CMD_INVALID, expected_syntax);
+		return cmd_results_new(CMD_INVALID, "%s", expected_syntax);
 	}
 
 	if (destination->type == N_CONTAINER &&
@@ -762,15 +770,6 @@ static struct cmd_results *cmd_move_in_direction(
 		ipc_event_window(container, "move");
 	}
 
-	// Hack to re-focus container
-	seat_set_raw_focus(config->handler_context.seat, &new_ws->node);
-	seat_set_focus_container(config->handler_context.seat, container);
-
-	if (old_ws != new_ws) {
-		ipc_event_workspace(old_ws, new_ws, "focus");
-		workspace_detect_urgent(old_ws);
-		workspace_detect_urgent(new_ws);
-	}
 	container_end_mouse_operation(container);
 
 	return cmd_results_new(CMD_SUCCESS, NULL);
@@ -821,7 +820,7 @@ static struct cmd_results *cmd_move_to_position(int argc, char **argv) {
 	}
 
 	if (!argc) {
-		return cmd_results_new(CMD_INVALID, expected_position_syntax);
+		return cmd_results_new(CMD_INVALID, "%s", expected_position_syntax);
 	}
 
 	bool absolute = false;
@@ -831,19 +830,19 @@ static struct cmd_results *cmd_move_to_position(int argc, char **argv) {
 		++argv;
 	}
 	if (!argc) {
-		return cmd_results_new(CMD_INVALID, expected_position_syntax);
+		return cmd_results_new(CMD_INVALID, "%s", expected_position_syntax);
 	}
 	if (strcmp(argv[0], "position") == 0) {
 		--argc;
 		++argv;
 	}
 	if (!argc) {
-		return cmd_results_new(CMD_INVALID, expected_position_syntax);
+		return cmd_results_new(CMD_INVALID, "%s", expected_position_syntax);
 	}
 	if (strcmp(argv[0], "cursor") == 0 || strcmp(argv[0], "mouse") == 0 ||
 			strcmp(argv[0], "pointer") == 0) {
 		if (absolute) {
-			return cmd_results_new(CMD_INVALID, expected_position_syntax);
+			return cmd_results_new(CMD_INVALID, "%s", expected_position_syntax);
 		}
 		return cmd_move_to_position_pointer(container);
 	} else if (strcmp(argv[0], "center") == 0) {
@@ -865,7 +864,7 @@ static struct cmd_results *cmd_move_to_position(int argc, char **argv) {
 	}
 
 	if (argc < 2) {
-		return cmd_results_new(CMD_FAILURE, expected_position_syntax);
+		return cmd_results_new(CMD_FAILURE, "%s", expected_position_syntax);
 	}
 
 	struct movement_amount lx = { .amount = 0, .unit = MOVEMENT_UNIT_INVALID };
@@ -878,7 +877,7 @@ static struct cmd_results *cmd_move_to_position(int argc, char **argv) {
 	}
 
 	if (argc < 1) {
-		return cmd_results_new(CMD_FAILURE, expected_position_syntax);
+		return cmd_results_new(CMD_FAILURE, "%s", expected_position_syntax);
 	}
 
 	struct movement_amount ly = { .amount = 0, .unit = MOVEMENT_UNIT_INVALID };
@@ -887,7 +886,7 @@ static struct cmd_results *cmd_move_to_position(int argc, char **argv) {
 	argc -= num_consumed_args;
 	argv += num_consumed_args;
 	if (argc > 0) {
-		return cmd_results_new(CMD_INVALID, expected_position_syntax);
+		return cmd_results_new(CMD_INVALID, "%s", expected_position_syntax);
 	}
 	if (ly.unit == MOVEMENT_UNIT_INVALID) {
 		return cmd_results_new(CMD_INVALID, "Invalid y position specified");
@@ -1033,13 +1032,13 @@ struct cmd_results *cmd_move(int argc, char **argv) {
 	}
 
 	if (!argc) {
-		return cmd_results_new(CMD_INVALID, expected_full_syntax);
+		return cmd_results_new(CMD_INVALID, "%s", expected_full_syntax);
 	}
 
 	// Only `move [window|container] [to] workspace` supports
 	// `--no-auto-back-and-forth` so treat others as invalid syntax
 	if (no_auto_back_and_forth && strcasecmp(argv[0], "workspace") != 0) {
-		return cmd_results_new(CMD_INVALID, expected_full_syntax);
+		return cmd_results_new(CMD_INVALID, "%s", expected_full_syntax);
 	}
 
 	if (strcasecmp(argv[0], "workspace") == 0 ||
@@ -1053,5 +1052,5 @@ struct cmd_results *cmd_move(int argc, char **argv) {
 			strcasecmp(argv[1], "position") == 0)) {
 		return cmd_move_to_position(argc, argv);
 	}
-	return cmd_results_new(CMD_INVALID, expected_full_syntax);
+	return cmd_results_new(CMD_INVALID, "%s", expected_full_syntax);
 }

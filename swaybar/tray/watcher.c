@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -6,6 +5,7 @@
 #include <string.h>
 #include "list.h"
 #include "log.h"
+#include "stringop.h"
 #include "swaybar/tray/watcher.h"
 
 static const char *obj_path = "/StatusNotifierWatcher";
@@ -38,6 +38,8 @@ static int handle_lost_service(sd_bus_message *msg,
 				list_del(watcher->items, idx--);
 				sd_bus_emit_signal(watcher->bus, obj_path, watcher->interface,
 						"StatusNotifierItemUnregistered", "s", id);
+				sd_bus_emit_properties_changed(watcher->bus, obj_path, watcher->interface,
+						"RegisteredStatusNotifierItems", NULL);
 				free(id);
 				if (using_standard_protocol(watcher)) {
 					break;
@@ -50,6 +52,10 @@ static int handle_lost_service(sd_bus_message *msg,
 			sway_log(SWAY_DEBUG, "Unregistering Status Notifier Host '%s'", service);
 			free(watcher->hosts->items[idx]);
 			list_del(watcher->hosts, idx);
+			if (watcher->hosts->length == 0) {
+				sd_bus_emit_properties_changed(watcher->bus, obj_path, watcher->interface,
+						"IsStatusNotifierHostRegistered", NULL);
+			}
 		}
 	}
 
@@ -76,14 +82,14 @@ static int register_sni(sd_bus_message *msg, void *data, sd_bus_error *error) {
 			service = service_or_path;
 			path = "/StatusNotifierItem";
 		}
-		size_t id_len = snprintf(NULL, 0, "%s%s", service, path) + 1;
-		id = malloc(id_len);
-		snprintf(id, id_len, "%s%s", service, path);
+		id = format_str("%s%s", service, path);
 	}
 
 	if (list_seq_find(watcher->items, cmp_id, id) == -1) {
 		sway_log(SWAY_DEBUG, "Registering Status Notifier Item '%s'", id);
 		list_add(watcher->items, id);
+		sd_bus_emit_properties_changed(watcher->bus, obj_path, watcher->interface,
+				"RegisteredStatusNotifierItems", NULL);
 		sd_bus_emit_signal(watcher->bus, obj_path, watcher->interface,
 				"StatusNotifierItemRegistered", "s", id);
 	} else {
@@ -106,8 +112,12 @@ static int register_host(sd_bus_message *msg, void *data, sd_bus_error *error) {
 	if (list_seq_find(watcher->hosts, cmp_id, service) == -1) {
 		sway_log(SWAY_DEBUG, "Registering Status Notifier Host '%s'", service);
 		list_add(watcher->hosts, strdup(service));
+		if (watcher->hosts->length == 1) {
+			sd_bus_emit_properties_changed(watcher->bus, obj_path, watcher->interface,
+					"IsStatusNotifierHostRegistered", NULL);
+		}
 		sd_bus_emit_signal(watcher->bus, obj_path, watcher->interface,
-				"StatusNotifierHostRegistered", "s", service);
+				"StatusNotifierHostRegistered", "");
 	} else {
 		sway_log(SWAY_DEBUG, "Status Notifier Host '%s' already registered", service);
 	}
@@ -159,9 +169,7 @@ struct swaybar_watcher *create_watcher(char *protocol, sd_bus *bus) {
 		return NULL;
 	}
 
-	size_t len = snprintf(NULL, 0, "org.%s.StatusNotifierWatcher", protocol) + 1;
-	watcher->interface = malloc(len);
-	snprintf(watcher->interface, len, "org.%s.StatusNotifierWatcher", protocol);
+	watcher->interface = format_str("org.%s.StatusNotifierWatcher", protocol);
 
 	sd_bus_slot *signal_slot = NULL, *vtable_slot = NULL;
 	int ret = sd_bus_add_object_vtable(bus, &vtable_slot, obj_path,

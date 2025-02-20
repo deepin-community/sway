@@ -10,10 +10,6 @@ Files: protocols/wlr-layer-shell-unstable-v1.xml
 Copyright: © 2017 Drew DeVault
 License: MIT-like
 
-Files: protocols/wlr-input-inhibitor-unstable-v1.xml
-Copyright: © 2018 Drew DeVault
-License: MIT-like
-
 Files: protocols/idle.xml
 Copyright: (C) 2015 Martin Gräßlin
 License: LGPL-2.1+
@@ -24,7 +20,7 @@ License: Expat
 
 Files: debian/*
 Copyright: © 2018 Nicolas Braud-Santoni <nicolas@braud-santoni.eu>
-           © 2018-2023 Birger Schacht <birger@debian.org>
+           © 2018-2024 Birger Schacht <birger@debian.org>
 License: Expat
 
 License: LGPL-2.1+

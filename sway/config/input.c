@@ -1,9 +1,9 @@
-#define _POSIX_C_SOURCE 200809L
 #include <stdlib.h>
 #include <limits.h>
 #include <float.h>
 #include "sway/config.h"
 #include "sway/input/keyboard.h"
+#include "sway/server.h"
 #include "log.h"
 
 struct input_config *new_input_config(const char* identifier) {
@@ -28,12 +28,15 @@ struct input_config *new_input_config(const char* identifier) {
 	input->dwtp = INT_MIN;
 	input->send_events = INT_MIN;
 	input->click_method = INT_MIN;
+	input->clickfinger_button_map = INT_MIN;
 	input->middle_emulation = INT_MIN;
 	input->natural_scroll = INT_MIN;
 	input->accel_profile = INT_MIN;
+	input->rotation_angle = FLT_MIN;
 	input->pointer_accel = FLT_MIN;
 	input->scroll_factor = FLT_MIN;
 	input->scroll_button = INT_MIN;
+	input->scroll_button_lock = INT_MIN;
 	input->scroll_method = INT_MIN;
 	input->left_handed = INT_MIN;
 	input->repeat_delay = INT_MIN;
@@ -52,6 +55,9 @@ void merge_input_config(struct input_config *dst, struct input_config *src) {
 	}
 	if (src->click_method != INT_MIN) {
 		dst->click_method = src->click_method;
+	}
+	if (src->clickfinger_button_map != INT_MIN) {
+		dst->clickfinger_button_map = src->clickfinger_button_map;
 	}
 	if (src->drag != INT_MIN) {
 		dst->drag = src->drag;
@@ -74,6 +80,9 @@ void merge_input_config(struct input_config *dst, struct input_config *src) {
 	if (src->natural_scroll != INT_MIN) {
 		dst->natural_scroll = src->natural_scroll;
 	}
+	if (src->rotation_angle != FLT_MIN) {
+		dst->rotation_angle = src->rotation_angle;
+	}
 	if (src->pointer_accel != FLT_MIN) {
 		dst->pointer_accel = src->pointer_accel;
 	}
@@ -91,6 +100,9 @@ void merge_input_config(struct input_config *dst, struct input_config *src) {
 	}
 	if (src->scroll_button != INT_MIN) {
 		dst->scroll_button = src->scroll_button;
+	}
+	if (src->scroll_button_lock != INT_MIN) {
+		dst->scroll_button_lock = src->scroll_button_lock;
 	}
 	if (src->send_events != INT_MIN) {
 		dst->send_events = src->send_events;

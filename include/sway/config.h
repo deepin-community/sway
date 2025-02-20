@@ -7,11 +7,13 @@
 #include <wlr/interfaces/wlr_switch.h>
 #include <wlr/types/wlr_tablet_tool.h>
 #include <wlr/util/box.h>
+#include <wlr/render/color.h>
 #include <xkbcommon/xkbcommon.h>
 #include <xf86drmMode.h>
 #include "../include/config.h"
 #include "gesture.h"
 #include "list.h"
+#include "stringop.h"
 #include "swaynag.h"
 #include "tree/container.h"
 #include "sway/input/tablet.h"
@@ -147,6 +149,7 @@ struct input_config {
 	int accel_profile;
 	struct calibration_matrix calibration_matrix;
 	int click_method;
+	int clickfinger_button_map;
 	int drag;
 	int drag_lock;
 	int dwt;
@@ -155,10 +158,12 @@ struct input_config {
 	int middle_emulation;
 	int natural_scroll;
 	float pointer_accel;
+	float rotation_angle;
 	float scroll_factor;
 	int repeat_delay;
 	int repeat_rate;
 	int scroll_button;
+	int scroll_button_lock;
 	int scroll_method;
 	int send_events;
 	int tap;
@@ -257,6 +262,7 @@ enum scale_filter_mode {
 
 enum render_bit_depth {
 	RENDER_BIT_DEPTH_DEFAULT, // the default is currently 8
+	RENDER_BIT_DEPTH_6,
 	RENDER_BIT_DEPTH_8,
 	RENDER_BIT_DEPTH_10,
 };
@@ -282,6 +288,9 @@ struct output_config {
 	int max_render_time; // In milliseconds
 	int adaptive_sync;
 	enum render_bit_depth render_bit_depth;
+	bool set_color_transform;
+	struct wlr_color_transform *color_transform;
+	int allow_tearing;
 
 	char *background;
 	char *background_option;
@@ -530,6 +539,7 @@ struct sway_config {
 	bool auto_back_and_forth;
 	bool show_marks;
 	enum alignment title_align;
+	bool primary_selection;
 
 	bool tiling_drag;
 	int tiling_drag_threshold;
@@ -623,7 +633,7 @@ void run_deferred_bindings(void);
 /**
  * Adds a warning entry to the swaynag instance used for errors.
  */
-void config_add_swaynag_warning(char *fmt, ...);
+void config_add_swaynag_warning(char *fmt, ...) _SWAY_ATTRIB_PRINTF(1, 2);
 
 /**
  * Free config struct
@@ -676,21 +686,27 @@ const char *sway_output_scale_filter_to_string(enum scale_filter_mode scale_filt
 
 struct output_config *new_output_config(const char *name);
 
-void merge_output_config(struct output_config *dst, struct output_config *src);
+bool apply_output_configs(struct output_config **ocs, size_t ocs_len,
+		bool test_only, bool degrade_to_off);
 
-bool apply_output_config(struct output_config *oc, struct sway_output *output);
+void apply_stored_output_configs(void);
 
-bool test_output_config(struct output_config *oc, struct sway_output *output);
-
-struct output_config *store_output_config(struct output_config *oc);
+/**
+ * store_output_config stores a new output config. An output may be matched by
+ * three different config types, in order of precedence: Identifier, name and
+ * wildcard. When storing a config type of lower precedence, assume that the
+ * user wants the config to take immediate effect by superseding (clearing) the
+ * same values from higher presedence configuration.
+ */
+void store_output_config(struct output_config *oc);
 
 struct output_config *find_output_config(struct sway_output *output);
 
-void apply_output_config_to_outputs(struct output_config *oc);
-
-void reset_outputs(void);
-
 void free_output_config(struct output_config *oc);
+
+void request_modeset(void);
+void force_modeset(void);
+bool modeset_is_pending(void);
 
 bool spawn_swaybg(void);
 
@@ -719,7 +735,7 @@ void free_workspace_config(struct workspace_config *wsc);
 /**
  * Updates the value of config->font_height based on the metrics for title's
  * font as reported by pango.
- * 
+ *
  * If the height has changed, all containers will be rearranged to take on the
  * new size.
  */

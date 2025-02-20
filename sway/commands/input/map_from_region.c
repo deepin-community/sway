@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
 #include <stdbool.h>
 #include <string.h>
 #include <strings.h>
@@ -11,11 +10,21 @@ static bool parse_coords(const char *str, double *x, double *y, bool *mm) {
 	*mm = false;
 
 	char *end;
-	*x = strtod(str, &end);
-	if (end[0] != 'x') {
-		return false;
+
+	// Check for "0x" prefix to avoid strtod treating the string as hex
+	if (str[0] == '0' && str[1] == 'x') {
+		if (strlen(str) < 3) {
+			return false;
+		}
+		*x = 0;
+		end = (char *)str + 2;
+	} else {
+		*x = strtod(str, &end);
+		if (end[0] != 'x') {
+			return false;
+		}
+		++end;
 	}
-	++end;
 
 	*y = strtod(end, &end);
 	if (end[0] == 'm') {

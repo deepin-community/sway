@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -99,7 +98,6 @@ static void seat_attachment_config_free(
 		struct seat_attachment_config *attachment) {
 	free(attachment->identifier);
 	free(attachment);
-	return;
 }
 
 static struct seat_attachment_config *seat_attachment_config_copy(

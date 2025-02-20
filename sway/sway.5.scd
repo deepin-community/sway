@@ -57,6 +57,7 @@ which you may only select one. *[...]* is used for optional arguments, and
 This section only lists general commands. For input and output commands, refer
 to *sway-input*(5) and *sway-output*(5).
 
+## Config only commands
 The following commands may only be used in the configuration file.
 
 *bar* [<bar-id>] <bar-subcommands...>
@@ -98,15 +99,16 @@ The following commands may only be used in the configuration file.
 	machines, it may be desirable to have Xwayland started immediately by
 	using _force_ instead of _enable_.
 
+## Runtime only commands
 The following commands cannot be used directly in the configuration file.
 They are expected to be used with *bindsym* or at runtime through *swaymsg*(1).
 
 *border* none|normal|csd|pixel [<n>]
 	Set border style for focused window. _normal_ includes a border of
 	thickness _n_ and a title bar. _pixel_ is a border without title bar _n_
-	pixels thick. Default is _normal_ with border thickness 2. _csd_ is short
-	for client-side-decorations, which allows the client to draw its own
-	decorations.
+	pixels thick. The title bar always shows in stacking or tabbed layouts.
+	_csd_ is short for client-side-decorations, which allows the client to draw
+	its own decorations. Default is _normal_ with border thickness 2.
 
 *border* toggle
 	Cycles through the available border styles.
@@ -214,6 +216,20 @@ set|plus|minus|toggle <amount>
 	This setting only has an effect if a per-output *max_render_time* is in
 	effect on the output the window is currently on. See *sway-output*(5) for
 	further details.
+
+*allow_tearing* yes|no
+	Allows or disallows screen tearing as a result of immediate page flips
+	for a fullscreen application.
+
+	When this option is not set, the tearing hints provided by the application
+	determine whether tearing is allowed. When _yes_ is specified,
+	the application allows tearing regardless of the tearing hints.
+	When _no_ is specified, tearing will never be allowed on the application,
+	regardless of the tearing hints.
+
+	This setting only has an effect if tearing is allowed on the output through
+	the per-output *allow_tearing* setting. See *sway-output*(5) 
+	for further details.
 
 *move* left|right|up|down [<px> px]
 	Moves the focused container in the direction specified. The optional _px_
@@ -371,6 +387,7 @@ set|plus|minus|toggle <amount>
 
 	The default format is "%title".
 
+## Config or runtime commands
 The following commands may be used either in the configuration file or at
 runtime.
 
@@ -389,8 +406,8 @@ runtime.
 		for_window <criteria> move container to output <output>
 
 *bindsym* [--whole-window] [--border] [--exclude-titlebar] [--release] [--locked] \
-[--to-code] [--input-device=<device>] [--no-warn] [--no-repeat] [Group<1-4>+]<key combo> \
-<command>
+[--to-code] [--input-device=<device>] [--no-warn] [--no-repeat] [--inhibited] \
+[Group<1-4>+]<key combo> <command>
 	Binds _key combo_ to execute the sway command _command_ when pressed. You
 	may use XKB key names here (*wev*(1) is a good tool for discovering these).
 	With the flag _--release_, the command is executed when the key combo is
@@ -399,6 +416,12 @@ runtime.
 	generic to all devices. If a group number is given, then the binding will
 	only be available for that group. By default, if you overwrite a binding,
 	swaynag will give you a warning. To silence this, use the _--no-warn_ flag.
+
+	For specifying modifier keys, you can use the XKB modifier names _Shift_,
+	_Lock_ (for Caps Lock), _Control_, _Mod1_ (for Alt), _Mod2_ (for Num Lock),
+	_Mod3_ (for XKB modifier Mod3), _Mod4_ (for the Logo key), and _Mod5_ (for
+	AltGr). In addition, you can use the aliases  _Ctrl_ (for Control), _Alt_
+	(for Alt), and _Super_ (for the Logo key).
 
 	Unless the flag _--locked_ is set, the command will not be run when a
 	screen locking program is active. If there is a matching binding with
@@ -454,7 +477,8 @@ runtime.
 ```
 
 	*bindcode* [--whole-window] [--border] [--exclude-titlebar] [--release] \
-[--locked] [--input-device=<device>] [--no-warn] [Group<1-4>+]<code> <command>
+[--locked] [--input-device=<device>] [--no-warn] [--no-repeat] [--inhibited] \
+[Group<1-4>+]<code> <command>
 	is also available for binding with key/button codes instead of key/button names.
 
 *bindswitch* [--locked] [--no-warn] [--reload] <switch>:<state> <command>
@@ -648,7 +672,8 @@ The default colors are:
 
 
 *default_border* normal|none|pixel [<n>]
-	Set default border style for new tiled windows.
+	Set default border style for new tiled windows. Config reload won't affect
+	existing windows, only newly created ones after the reload.
 
 *default_floating_border* normal|none|pixel [<n>]
 	Set default border style for new floating windows. This only applies to
@@ -807,6 +832,10 @@ The default colors are:
 	dialog will not be rendered. If _leave_fullscreen_, the view will exit
 	fullscreen mode and the dialog will be rendered.
 
+*primary_selection* enabled|disabled
+	Enable or disable the primary selection clipboard. May only be configured
+	at launch. Default is _enabled_.
+
 *set* $<name> <value>
 	Sets variable $_name_ to _value_. You can use the new variable in the
 	arguments of future commands. When the variable is used, it can be escaped
@@ -956,6 +985,9 @@ You may like to use swaymsg -t get_tree for finding the values of these
 properties in practice for your applications.
 
 The following attributes may be matched with:
+
+*all*
+	Matches all windows.
 
 *app_id*
 	Compare value against the app id. Can be a regular expression. If value is
