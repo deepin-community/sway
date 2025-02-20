@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -264,6 +263,9 @@ void arrange_workspace(struct sway_workspace *workspace) {
 			area->width, area->height, area->x, area->y);
 
 	bool first_arrange = workspace->width == 0 && workspace->height == 0;
+	struct wlr_box prev_box;
+	workspace_get_box(workspace, &prev_box);
+
 	double prev_x = workspace->x - workspace->current_gaps.left;
 	double prev_y = workspace->y - workspace->current_gaps.top;
 	workspace->width = area->width;
@@ -277,13 +279,14 @@ void arrange_workspace(struct sway_workspace *workspace) {
 	if (!first_arrange && (diff_x != 0 || diff_y != 0)) {
 		for (int i = 0; i < workspace->floating->length; ++i) {
 			struct sway_container *floater = workspace->floating->items[i];
-			container_floating_translate(floater, diff_x, diff_y);
-			double center_x = floater->pending.x + floater->pending.width / 2;
-			double center_y = floater->pending.y + floater->pending.height / 2;
 			struct wlr_box workspace_box;
 			workspace_get_box(workspace, &workspace_box);
-			if (!wlr_box_contains_point(&workspace_box, center_x, center_y)) {
-				container_floating_move_to_center(floater);
+			floating_fix_coordinates(floater, &prev_box, &workspace_box);
+			// Set transformation for scratchpad windows.
+			if (floater->scratchpad) {
+				struct wlr_box output_box;
+				output_get_box(output, &output_box);
+				floater->transform = output_box;
 			}
 		}
 	}
@@ -311,14 +314,9 @@ void arrange_output(struct sway_output *output) {
 	if (config->reloading) {
 		return;
 	}
-	struct wlr_box output_box;
-	wlr_output_layout_get_box(root->output_layout,
-		output->wlr_output, &output_box);
-	output->lx = output_box.x;
-	output->ly = output_box.y;
-	output->width = output_box.width;
-	output->height = output_box.height;
-
+	if (!output->wlr_output->enabled) {
+		return;
+	}
 	for (int i = 0; i < output->workspaces->length; ++i) {
 		struct sway_workspace *workspace = output->workspaces->items[i];
 		arrange_workspace(workspace);

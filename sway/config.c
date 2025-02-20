@@ -1,3 +1,4 @@
+#undef _POSIX_C_SOURCE
 #define _XOPEN_SOURCE 700 // for realpath
 #include <stdio.h>
 #include <stdbool.h>
@@ -22,6 +23,7 @@
 #include "sway/config.h"
 #include "sway/criteria.h"
 #include "sway/desktop/transaction.h"
+#include "sway/server.h"
 #include "sway/swaynag.h"
 #include "sway/tree/arrange.h"
 #include "sway/tree/root.h"
@@ -36,19 +38,26 @@
 struct sway_config *config = NULL;
 
 static struct xkb_state *keysym_translation_state_create(
-		struct xkb_rule_names rules) {
-	struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+		struct xkb_rule_names rules, uint32_t context_flags) {
+	struct xkb_context *context = xkb_context_new(context_flags | XKB_CONTEXT_NO_SECURE_GETENV);
 	struct xkb_keymap *xkb_keymap = xkb_keymap_new_from_names(
 		context,
 		&rules,
 		XKB_KEYMAP_COMPILE_NO_FLAGS);
-
 	xkb_context_unref(context);
+	if (xkb_keymap == NULL) {
+		sway_log(SWAY_ERROR, "Failed to compile keysym translation XKB keymap");
+		return NULL;
+	}
+
 	return xkb_state_new(xkb_keymap);
 }
 
 static void keysym_translation_state_destroy(
 		struct xkb_state *state) {
+	if (state == NULL) {
+		return;
+	}
 	xkb_keymap_unref(xkb_state_get_keymap(state));
 	xkb_state_unref(state);
 }
@@ -273,6 +282,7 @@ static void config_defaults(struct sway_config *config) {
 	config->title_align = ALIGN_LEFT;
 	config->tiling_drag = true;
 	config->tiling_drag_threshold = 9;
+	config->primary_selection = true;
 
 	config->smart_gaps = SMART_GAPS_OFF;
 	config->gaps_inner = 0;
@@ -335,8 +345,14 @@ static void config_defaults(struct sway_config *config) {
 
 	// The keysym to keycode translation
 	struct xkb_rule_names rules = {0};
-	config->keysym_translation_state =
-		keysym_translation_state_create(rules);
+	config->keysym_translation_state = keysym_translation_state_create(rules, 0);
+	if (config->keysym_translation_state == NULL) {
+		config->keysym_translation_state = keysym_translation_state_create(rules,
+			XKB_CONTEXT_NO_ENVIRONMENT_NAMES);
+	}
+	if (config->keysym_translation_state == NULL) {
+		goto cleanup;
+	}
 
 	return;
 cleanup:
@@ -351,13 +367,7 @@ static char *config_path(const char *prefix, const char *config_folder) {
 	if (!prefix || !prefix[0] || !config_folder || !config_folder[0]) {
 		return NULL;
 	}
-
-	const char *filename = "config";
-
-	size_t size = 3 + strlen(prefix) + strlen(config_folder) + strlen(filename);
-	char *path = calloc(size, sizeof(char));
-	snprintf(path, size, "%s/%s/%s", prefix, config_folder, filename);
-	return path;
+	return format_str("%s/%s/config", prefix, config_folder);
 }
 
 static char *get_config_path(void) {
@@ -367,10 +377,7 @@ static char *get_config_path(void) {
 
 	const char *config_home = getenv("XDG_CONFIG_HOME");
 	if ((config_home == NULL || config_home[0] == '\0') && home != NULL) {
-		size_t size_fallback = 1 + strlen(home) + strlen("/.config");
-		config_home_fallback = calloc(size_fallback, sizeof(char));
-		if (config_home_fallback != NULL)
-			snprintf(config_home_fallback, size_fallback, "%s/.config", home);
+		config_home_fallback = format_str("%s/.config", home);
 		config_home = config_home_fallback;
 	}
 
@@ -474,6 +481,11 @@ bool load_main_config(const char *file, bool is_active, bool validating) {
 				old_config->xwayland ? "enabled" : "disabled");
 		config->xwayland = old_config->xwayland;
 
+		// primary_selection can only be enabled/disabled at launch
+		sway_log(SWAY_DEBUG, "primary_selection will remain %s",
+				old_config->primary_selection ? "enabled" : "disabled");
+		config->primary_selection = old_config->primary_selection;
+
 		if (!config->validating) {
 			if (old_config->swaybg_client != NULL) {
 				wl_client_destroy(old_config->swaybg_client);
@@ -493,56 +505,7 @@ bool load_main_config(const char *file, bool is_active, bool validating) {
 
 	config->reading = true;
 
-	// Read security configs
-	// TODO: Security
-	bool success = true;
-	/*
-	DIR *dir = opendir(SYSCONFDIR "/sway/security.d");
-	if (!dir) {
-		sway_log(SWAY_ERROR,
-			"%s does not exist, sway will have no security configuration"
-			" and will probably be broken", SYSCONFDIR "/sway/security.d");
-	} else {
-		list_t *secconfigs = create_list();
-		char *base = SYSCONFDIR "/sway/security.d/";
-		struct dirent *ent = readdir(dir);
-		struct stat s;
-		while (ent != NULL) {
-			char *_path = malloc(strlen(ent->d_name) + strlen(base) + 1);
-			strcpy(_path, base);
-			strcat(_path, ent->d_name);
-			lstat(_path, &s);
-			if (S_ISREG(s.st_mode) && ent->d_name[0] != '.') {
-				list_add(secconfigs, _path);
-			}
-			else {
-				free(_path);
-			}
-			ent = readdir(dir);
-		}
-		closedir(dir);
-
-		list_qsort(secconfigs, qstrcmp);
-		for (int i = 0; i < secconfigs->length; ++i) {
-			char *_path = secconfigs->items[i];
-			if (stat(_path, &s) || s.st_uid != 0 || s.st_gid != 0 ||
-					(((s.st_mode & 0777) != 0644) &&
-					(s.st_mode & 0777) != 0444)) {
-				sway_log(SWAY_ERROR,
-					"Refusing to load %s - it must be owned by root "
-					"and mode 644 or 444", _path);
-				success = false;
-			} else {
-				success = success && load_config(_path, config);
-			}
-		}
-
-		list_free_items_and_destroy(secconfigs);
-	}
-	*/
-
-	success = success && load_config(path, config,
-			&config->swaynag_config_errors);
+	bool success = load_config(path, config, &config->swaynag_config_errors);
 
 	if (validating) {
 		free_config(config);
@@ -553,7 +516,7 @@ bool load_main_config(const char *file, bool is_active, bool validating) {
 	// Only really necessary if not explicitly `font` is set in the config.
 	config_update_font_height();
 
-	if (is_active && !validating) {
+	if (!validating) {
 		input_manager_verify_fallback_seat();
 
 		for (int i = 0; i < config->input_configs->length; i++) {
@@ -570,12 +533,14 @@ bool load_main_config(const char *file, bool is_active, bool validating) {
 		}
 		sway_switch_retrigger_bindings_for_all();
 
-		reset_outputs();
 		spawn_swaybg();
 
 		config->reloading = false;
-		if (config->swaynag_config_errors.client != NULL) {
-			swaynag_show(&config->swaynag_config_errors);
+		if (is_active) {
+			request_modeset();
+			if (config->swaynag_config_errors.client != NULL) {
+				swaynag_show(&config->swaynag_config_errors);
+			}
 		}
 	}
 
@@ -923,23 +888,18 @@ void config_add_swaynag_warning(char *fmt, ...) {
 	if (config->reading && !config->validating) {
 		va_list args;
 		va_start(args, fmt);
-		size_t length = vsnprintf(NULL, 0, fmt, args) + 1;
+		char *str = vformat_str(fmt, args);
 		va_end(args);
-
-		char *temp = malloc(length + 1);
-		if (!temp) {
-			sway_log(SWAY_ERROR, "Failed to allocate buffer for warning.");
+		if (str == NULL) {
 			return;
 		}
-
-		va_start(args, fmt);
-		vsnprintf(temp, length, fmt, args);
-		va_end(args);
 
 		swaynag_log(config->swaynag_command, &config->swaynag_config_errors,
 			"Warning on line %i (%s) '%s': %s",
 			config->current_config_line_number, config->current_config_path,
-			config->current_config_line, temp);
+			config->current_config_line, str);
+
+		free(str);
 	}
 }
 
@@ -979,7 +939,7 @@ char *do_var_replacement(char *str) {
 				int offset = find - str;
 				strncpy(newptr, str, offset);
 				newptr += offset;
-				strncpy(newptr, var->value, vvlen);
+				memcpy(newptr, var->value, vvlen);
 				newptr += vvlen;
 				strcpy(newptr, find + vnlen);
 				free(str);
@@ -1041,8 +1001,12 @@ void translate_keysyms(struct input_config *input_config) {
 
 	struct xkb_rule_names rules = {0};
 	input_config_fill_rule_names(input_config, &rules);
-	config->keysym_translation_state =
-		keysym_translation_state_create(rules);
+	config->keysym_translation_state = keysym_translation_state_create(rules, 0);
+	if (config->keysym_translation_state == NULL) {
+		sway_log(SWAY_ERROR, "Failed to create keysym translation XKB state "
+			"for device '%s'", input_config->identifier);
+		return;
+	}
 
 	for (int i = 0; i < config->modes->length; ++i) {
 		struct sway_mode *mode = config->modes->items[i];

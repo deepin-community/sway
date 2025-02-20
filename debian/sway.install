@@ -1,3 +1,5 @@
+debian/config.d/50-systemd-user.conf /etc/sway/config.d/
+debian/sway-portals.conf /usr/share/xdg-desktop-portal/
 etc/sway
 usr/bin/sway*
 usr/share/bash-completion/completions/sway*
@@ -7,4 +9,3 @@ usr/share/man/man5/sway*
 usr/share/man/man7/sway*
 usr/share/wayland-sessions
 usr/share/zsh/vendor-completions/_sway*
-debian/config.d/50-systemd-user.conf /etc/sway/config.d/

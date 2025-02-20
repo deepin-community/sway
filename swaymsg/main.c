@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
 
 #include <limits.h>
 #include <stdio.h>
@@ -60,7 +59,7 @@ static void pretty_print_cmd(json_object *r) {
 	if (!success_object(r)) {
 		json_object *error;
 		if (!json_object_object_get_ex(r, "error", &error)) {
-			printf("An unknkown error occurred");
+			printf("An unknown error occurred");
 		} else {
 			printf("Error: %s\n", json_object_get_string(error));
 		}
@@ -185,15 +184,16 @@ static void pretty_print_seat(json_object *i) {
 }
 
 static void pretty_print_output(json_object *o) {
-	json_object *name, *rect, *focused, *active, *ws, *current_mode, *non_desktop;
+	json_object *name, *rect, *focused, *active, *power, *ws, *current_mode, *non_desktop;
 	json_object_object_get_ex(o, "name", &name);
 	json_object_object_get_ex(o, "rect", &rect);
 	json_object_object_get_ex(o, "focused", &focused);
 	json_object_object_get_ex(o, "active", &active);
+	json_object_object_get_ex(o, "power", &power);
 	json_object_object_get_ex(o, "current_workspace", &ws);
 	json_object_object_get_ex(o, "non_desktop", &non_desktop);
 	json_object *make, *model, *serial, *scale, *scale_filter, *subpixel,
-		*transform, *max_render_time, *adaptive_sync_status;
+		*transform, *max_render_time, *adaptive_sync_status, *allow_tearing;
 	json_object_object_get_ex(o, "make", &make);
 	json_object_object_get_ex(o, "model", &model);
 	json_object_object_get_ex(o, "serial", &serial);
@@ -203,6 +203,7 @@ static void pretty_print_output(json_object *o) {
 	json_object_object_get_ex(o, "transform", &transform);
 	json_object_object_get_ex(o, "max_render_time", &max_render_time);
 	json_object_object_get_ex(o, "adaptive_sync_status", &adaptive_sync_status);
+	json_object_object_get_ex(o, "allow_tearing", &allow_tearing);
 	json_object *x, *y;
 	json_object_object_get_ex(rect, "x", &x);
 	json_object_object_get_ex(rect, "y", &y);
@@ -226,6 +227,7 @@ static void pretty_print_output(json_object *o) {
 		printf(
 			"Output %s '%s %s %s'%s\n"
 			"  Current mode: %dx%d @ %.3f Hz\n"
+			"  Power: %s\n"
 			"  Position: %d,%d\n"
 			"  Scale factor: %f\n"
 			"  Scale filter: %s\n"
@@ -240,6 +242,7 @@ static void pretty_print_output(json_object *o) {
 			json_object_get_int(width),
 			json_object_get_int(height),
 			(double)json_object_get_int(refresh) / 1000,
+			json_object_get_boolean(power) ? "on" : "off",
 			json_object_get_int(x), json_object_get_int(y),
 			json_object_get_double(scale),
 			json_object_get_string(scale_filter),
@@ -254,9 +257,12 @@ static void pretty_print_output(json_object *o) {
 
 		printf("  Adaptive sync: %s\n",
 			json_object_get_string(adaptive_sync_status));
+
+		printf("  Allow tearing: %s\n",
+			json_object_get_boolean(allow_tearing) ? "yes" : "no");
 	} else {
 		printf(
-			"Output %s '%s %s %s' (inactive)\n",
+			"Output %s '%s %s %s' (disabled)\n",
 			json_object_get_string(name),
 			json_object_get_string(make),
 			json_object_get_string(model),

@@ -53,6 +53,8 @@ size_t escape_markup_text(const char *src, char *dest) {
 PangoLayout *get_pango_layout(cairo_t *cairo, const PangoFontDescription *desc,
 		const char *text, double scale, bool markup) {
 	PangoLayout *layout = pango_cairo_create_layout(cairo);
+	pango_context_set_round_glyph_positions(pango_layout_get_context(layout), false);
+
 	PangoAttrList *attrs;
 	if (markup) {
 		char *buf;
@@ -84,18 +86,11 @@ void get_text_size(cairo_t *cairo, const PangoFontDescription *desc, int *width,
 		int *baseline, double scale, bool markup, const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	// Add one since vsnprintf excludes null terminator.
-	int length = vsnprintf(NULL, 0, fmt, args) + 1;
+	char *buf = vformat_str(fmt, args);
 	va_end(args);
-
-	char *buf = malloc(length);
 	if (buf == NULL) {
-		sway_log(SWAY_ERROR, "Failed to allocate memory");
 		return;
 	}
-	va_start(args, fmt);
-	vsnprintf(buf, length, fmt, args);
-	va_end(args);
 
 	PangoLayout *layout = get_pango_layout(cairo, desc, buf, scale, markup);
 	pango_cairo_update_layout(cairo, layout);
@@ -104,12 +99,14 @@ void get_text_size(cairo_t *cairo, const PangoFontDescription *desc, int *width,
 		*baseline = pango_layout_get_baseline(layout) / PANGO_SCALE;
 	}
 	g_object_unref(layout);
+
 	free(buf);
 }
 
 void get_text_metrics(const PangoFontDescription *description, int *height, int *baseline) {
 	cairo_t *cairo = cairo_create(NULL);
 	PangoContext *pango = pango_cairo_create_context(cairo);
+	pango_context_set_round_glyph_positions(pango, false);
 	// When passing NULL as a language, pango uses the current locale.
 	PangoFontMetrics *metrics = pango_context_get_metrics(pango, description, NULL);
 
@@ -125,18 +122,11 @@ void render_text(cairo_t *cairo, const PangoFontDescription *desc,
 		double scale, bool markup, const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	// Add one since vsnprintf excludes null terminator.
-	int length = vsnprintf(NULL, 0, fmt, args) + 1;
+	char *buf = vformat_str(fmt, args);
 	va_end(args);
-
-	char *buf = malloc(length);
 	if (buf == NULL) {
-		sway_log(SWAY_ERROR, "Failed to allocate memory");
 		return;
 	}
-	va_start(args, fmt);
-	vsnprintf(buf, length, fmt, args);
-	va_end(args);
 
 	PangoLayout *layout = get_pango_layout(cairo, desc, buf, scale, markup);
 	cairo_font_options_t *fo = cairo_font_options_create();
@@ -146,5 +136,6 @@ void render_text(cairo_t *cairo, const PangoFontDescription *desc,
 	pango_cairo_update_layout(cairo, layout);
 	pango_cairo_show_layout(cairo, layout);
 	g_object_unref(layout);
+
 	free(buf);
 }

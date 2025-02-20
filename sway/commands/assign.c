@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <string.h>
 #include "sway/commands.h"
@@ -17,7 +16,7 @@ struct cmd_results *cmd_assign(int argc, char **argv) {
 	char *err_str = NULL;
 	struct criteria *criteria = criteria_parse(argv[0], &err_str);
 	if (!criteria) {
-		error = cmd_results_new(CMD_INVALID, err_str);
+		error = cmd_results_new(CMD_INVALID, "%s", err_str);
 		free(err_str);
 		return error;
 	}

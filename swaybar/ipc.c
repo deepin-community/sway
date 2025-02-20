@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200809
 #include <limits.h>
 #include <poll.h>
 #include <stdio.h>
@@ -426,12 +425,9 @@ bool ipc_initialize(struct swaybar *bar) {
 	}
 	free(res);
 
-	struct swaybar_config *config = bar->config;
-	char subscribe[128]; // suitably large buffer
-	len = snprintf(subscribe, 128,
-			"[ \"barconfig_update\" , \"bar_state_update\" %s %s ]",
-			config->binding_mode_indicator ? ", \"mode\"" : "",
-			config->workspace_buttons ? ", \"workspace\"" : "");
+	char *subscribe =
+		"[ \"barconfig_update\", \"bar_state_update\", \"mode\", \"workspace\" ]";
+	len = strlen(subscribe);
 	free(ipc_single_command(bar->ipc_event_socketfd,
 			IPC_SUBSCRIBE, subscribe, &len));
 	return true;
@@ -522,8 +518,7 @@ static bool handle_barconfig_update(struct swaybar *bar, const char *payload,
 #if HAVE_TRAY
 	if (oldcfg->tray_hidden && !newcfg->tray_hidden) {
 		bar->tray = create_tray(bar);
-		loop_add_fd(bar->eventloop, bar->tray->fd, POLLIN, tray_in,
-				bar->tray->bus);
+		loop_add_fd(bar->eventloop, bar->tray->fd, POLLIN, tray_in, bar);
 	} else if (bar->tray && newcfg->tray_hidden) {
 		loop_remove_fd(bar->eventloop, bar->tray->fd);
 		destroy_tray(bar->tray);

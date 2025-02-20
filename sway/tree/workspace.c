@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200809
 #include <ctype.h>
 #include <limits.h>
 #include <stdbool.h>
@@ -11,6 +10,7 @@
 #include "sway/input/seat.h"
 #include "sway/ipc-server.h"
 #include "sway/output.h"
+#include "sway/server.h"
 #include "sway/tree/arrange.h"
 #include "sway/tree/container.h"
 #include "sway/tree/node.h"
@@ -71,6 +71,18 @@ struct sway_workspace *workspace_create(struct sway_output *output,
 		return NULL;
 	}
 	node_init(&ws->node, N_WORKSPACE, ws);
+
+	bool failed = false;
+	ws->layers.tiling = alloc_scene_tree(root->staging, &failed);
+	ws->layers.fullscreen = alloc_scene_tree(root->staging, &failed);
+
+	if (failed) {
+		wlr_scene_node_destroy(&ws->layers.tiling->node);
+		wlr_scene_node_destroy(&ws->layers.fullscreen->node);
+		free(ws);
+		return NULL;
+	}
+
 	ws->name = strdup(name);
 	ws->prev_split_layout = L_NONE;
 	ws->layout = output_get_default_layout(output);
@@ -131,6 +143,11 @@ void workspace_destroy(struct sway_workspace *workspace) {
 		return;
 	}
 
+	scene_node_disown_children(workspace->layers.tiling);
+	scene_node_disown_children(workspace->layers.fullscreen);
+	wlr_scene_node_destroy(&workspace->layers.tiling->node);
+	wlr_scene_node_destroy(&workspace->layers.fullscreen->node);
+
 	free(workspace->name);
 	free(workspace->representation);
 	list_free_items_and_destroy(workspace->output_priority);
@@ -176,22 +193,16 @@ void workspace_consider_destroy(struct sway_workspace *ws) {
 static bool workspace_valid_on_output(const char *output_name,
 		const char *ws_name) {
 	struct workspace_config *wsc = workspace_find_config(ws_name);
-	char identifier[128];
 	struct sway_output *output = output_by_name_or_id(output_name);
 	if (!output) {
 		return false;
 	}
-	output_name = output->wlr_output->name;
-	output_get_identifier(identifier, sizeof(identifier), output);
-
 	if (!wsc) {
 		return true;
 	}
 
 	for (int i = 0; i < wsc->outputs->length; i++) {
-		if (strcmp(wsc->outputs->items[i], "*") == 0 ||
-				strcmp(wsc->outputs->items[i], output_name) == 0 ||
-				strcmp(wsc->outputs->items[i], identifier) == 0) {
+		if (output_match_name_or_id(output, wsc->outputs->items[i])) {
 			return true;
 		}
 	}
@@ -286,13 +297,10 @@ char *workspace_next_name(const char *output_name) {
 	// assignments primarily, falling back to bindings and numbers.
 	struct sway_mode *mode = config->current_mode;
 
-	char identifier[128];
 	struct sway_output *output = output_by_name_or_id(output_name);
 	if (!output) {
 		return NULL;
 	}
-	output_name = output->wlr_output->name;
-	output_get_identifier(identifier, sizeof(identifier), output);
 
 	int order = INT_MAX;
 	char *target = NULL;
@@ -312,9 +320,7 @@ char *workspace_next_name(const char *output_name) {
 		}
 		bool found = false;
 		for (int j = 0; j < wsc->outputs->length; ++j) {
-			if (strcmp(wsc->outputs->items[j], "*") == 0 ||
-					strcmp(wsc->outputs->items[j], output_name) == 0 ||
-					strcmp(wsc->outputs->items[j], identifier) == 0) {
+			if (output_match_name_or_id(output, wsc->outputs->items[j])) {
 				found = true;
 				free(target);
 				target = strdup(wsc->workspace);
@@ -654,15 +660,9 @@ void workspace_output_add_priority(struct sway_workspace *workspace,
 
 struct sway_output *workspace_output_get_highest_available(
 		struct sway_workspace *ws, struct sway_output *exclude) {
-	char exclude_id[128] = {'\0'};
-	if (exclude) {
-		output_get_identifier(exclude_id, sizeof(exclude_id), exclude);
-	}
-
 	for (int i = 0; i < ws->output_priority->length; i++) {
-		char *name = ws->output_priority->items[i];
-		if (exclude && (strcmp(name, exclude->wlr_output->name) == 0
-					|| strcmp(name, exclude_id) == 0)) {
+		const char *name = ws->output_priority->items[i];
+		if (exclude && output_match_name_or_id(exclude, name)) {
 			continue;
 		}
 
@@ -686,7 +686,6 @@ void workspace_detect_urgent(struct sway_workspace *workspace) {
 	if (workspace->urgent != new_urgent) {
 		workspace->urgent = new_urgent;
 		ipc_event_workspace(NULL, workspace, "urgent");
-		output_damage_whole(workspace->output);
 	}
 }
 
@@ -709,6 +708,11 @@ void workspace_for_each_container(struct sway_workspace *ws,
 struct sway_container *workspace_find_container(struct sway_workspace *ws,
 		bool (*test)(struct sway_container *con, void *data), void *data) {
 	struct sway_container *result = NULL;
+    if (ws == NULL){
+        sway_log(SWAY_ERROR, "Cannot find container with no workspace.");
+        return NULL;
+    }
+
 	// Tiling
 	for (int i = 0; i < ws->tiling->length; ++i) {
 		struct sway_container *child = ws->tiling->items[i];

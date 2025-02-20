@@ -376,6 +376,12 @@ node and will have the following properties:
 :  integer
 :  (Only containers and views) The fullscreen mode of the node. 0 means none, 1 means
    full workspace, and 2 means global fullscreen
+|- floating
+:  string
+:  Floating state of container. Can be either "auto_off" or "user_on"
+|- scratchpad_state
+:  string
+:  Whether the window is in the scratchpad. Can be either "none" or "fresh"
 |- app_id
 :  string
 :  (Only views) For an xdg-shell view, the name of the application, if set.
@@ -1040,7 +1046,7 @@ An object with a single string property containing the contents of the config
 *Example Reply:*
 ```
 {
-	"config": "set $mod Mod4\nbindsym $mod+q exit\n"
+	"config": "set $mod Mod4\\nbindsym $mod+q exit\\n"
 }
 ```
 
@@ -1162,7 +1168,7 @@ following properties will be included for devices that support them:
 :  Whether tap to click is enabled. It can be _enabled_ or _disabled_
 |- tap_button_map
 :  string
-:  The finger to button mapping in use. It can be _lmr_ or _lrm_
+:  The finger to button mapping in use for tapping. It can be _lmr_ or _lrm_
 |- tap_drag
 :  string
 :  Whether tap-and-drag is enabled. It can be _enabled_ or _disabled_
@@ -1184,6 +1190,9 @@ following properties will be included for devices that support them:
 |- click_method
 :  string
 :  The click method in use. It can be _none_, _button_areas_, or _clickfinger_
+|- click_button_map
+:  string
+:  The finger to button mapping in use for clickfinger. It can be _lmr_ or _lrm_
 |- middle_emulation
 :  string
 :  Whether middle emulation is enabled. It can be _enabled_ or _disabled_
@@ -1195,6 +1204,9 @@ following properties will be included for devices that support them:
 :  int
 :  The scroll button to use when _scroll_method_ is _on_button_down_. This
    will be given as an input event code
+|- scroll_button_lock
+:  string
+:  Whether scroll button lock is enabled. It can be _enabled_ or _disabled_
 |- dwt
 :  string
 :  Whether disable-while-typing is enabled. It can be _enabled_ or _disabled_
@@ -1446,6 +1458,9 @@ available:
 :  workspace
 :[ Sent whenever an event involving a workspace occurs such as initialization
    of a new workspace or a different workspace gains focus
+|- 0x80000001
+:  output
+:  Sent when outputs are updated
 |- 0x80000002
 :  mode
 :  Sent whenever the binding mode changes
@@ -1563,6 +1578,20 @@ The following change types are currently available:
 		"nodes": [
 		]
 	}
+}
+```
+
+## 0x80000001. OUTPUT
+
+Sent whenever an output is added, removed, or its configuration is changed.
+The event is a single object with the property _change_, which is a string
+containing the reason for the change. Currently, the only value for _change_ is
+_unspecified_.
+
+*Example Event:*
+```
+{
+	"change": "unspecified"
 }
 ```
 

@@ -3,7 +3,9 @@
 
 #include <wlr/types/wlr_keyboard_shortcuts_inhibit_v1.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_touch.h>
 #include <wlr/util/edges.h>
 #include "sway/config.h"
 #include "sway/input/input-manager.h"
@@ -15,7 +17,7 @@ struct sway_seat;
 struct sway_seatop_impl {
 	void (*button)(struct sway_seat *seat, uint32_t time_msec,
 			struct wlr_input_device *device, uint32_t button,
-			enum wlr_button_state state);
+			enum wl_pointer_button_state state);
 	void (*pointer_motion)(struct sway_seat *seat, uint32_t time_msec);
 	void (*pointer_axis)(struct sway_seat *seat,
 			struct wlr_pointer_axis_event *event);
@@ -36,14 +38,20 @@ struct sway_seatop_impl {
 	void (*swipe_end)(struct sway_seat *seat,
 			struct wlr_pointer_swipe_end_event *event);
 	void (*rebase)(struct sway_seat *seat, uint32_t time_msec);
+	void (*touch_motion)(struct sway_seat *seat,
+			struct wlr_touch_motion_event *event, double lx, double ly);
+	void (*touch_up)(struct sway_seat *seat,
+			struct wlr_touch_up_event *event);
+	void (*touch_down)(struct sway_seat *seat,
+			struct wlr_touch_down_event *event, double lx, double ly);
+	void (*touch_cancel)(struct sway_seat *seat,
+			struct wlr_touch_cancel_event *event);
 	void (*tablet_tool_motion)(struct sway_seat *seat,
 			struct sway_tablet_tool *tool, uint32_t time_msec);
 	void (*tablet_tool_tip)(struct sway_seat *seat, struct sway_tablet_tool *tool,
 			uint32_t time_msec, enum wlr_tablet_tool_tip_state state);
 	void (*end)(struct sway_seat *seat);
 	void (*unref)(struct sway_seat *seat, struct sway_container *con);
-	void (*render)(struct sway_seat *seat, struct sway_output *output,
-			pixman_region32_t *damage);
 	bool allow_set_cursor;
 };
 
@@ -66,19 +74,6 @@ struct sway_seat_node {
 	struct wl_listener destroy;
 };
 
-struct sway_drag_icon {
-	struct sway_seat *seat;
-	struct wlr_drag_icon *wlr_drag_icon;
-	struct wl_list link; // sway_root::drag_icons
-
-	double x, y; // in layout-local coordinates
-
-	struct wl_listener surface_commit;
-	struct wl_listener map;
-	struct wl_listener unmap;
-	struct wl_listener destroy;
-};
-
 struct sway_drag {
 	struct sway_seat *seat;
 	struct wlr_drag *wlr_drag;
@@ -89,16 +84,23 @@ struct sway_seat {
 	struct wlr_seat *wlr_seat;
 	struct sway_cursor *cursor;
 
+	// Seat scene tree structure
+	// - scene_tree
+	//   - drag icons
+	//     - drag icon 1
+	//     - drag icon 2
+	//   - seatop specific stuff
+	struct wlr_scene_tree *scene_tree;
+	struct wlr_scene_tree *drag_icons;
+
 	bool has_focus;
 	struct wl_list focus_stack; // list of containers in focus order
 	struct sway_workspace *workspace;
 	char *prev_workspace_name; // for workspace back_and_forth
 
-	// If the focused layer is set, views cannot receive keyboard focus
 	struct wlr_layer_surface_v1 *focused_layer;
-
-	// If exclusive_client is set, no other clients will receive input events
-	struct wl_client *exclusive_client;
+	// If the exclusive layer is set, views cannot receive keyboard focus
+	bool has_exclusive_layer;
 
 	// Last touch point
 	int32_t touch_id;
@@ -122,6 +124,7 @@ struct sway_seat {
 	struct wl_listener start_drag;
 	struct wl_listener request_set_selection;
 	struct wl_listener request_set_primary_selection;
+	struct wl_listener destroy;
 
 	struct wl_list devices; // sway_seat_device::link
 	struct wl_list keyboard_groups; // sway_keyboard_group::link
@@ -157,6 +160,9 @@ void seat_add_device(struct sway_seat *seat,
 void seat_configure_device(struct sway_seat *seat,
 		struct sway_input_device *device);
 
+void seat_configure_device_mapping(struct sway_seat *seat,
+		struct sway_input_device *input_device);
+
 void seat_reset_device(struct sway_seat *seat,
 		struct sway_input_device *input_device);
 
@@ -187,8 +193,7 @@ void seat_set_focus_surface(struct sway_seat *seat,
 void seat_set_focus_layer(struct sway_seat *seat,
 		struct wlr_layer_surface_v1 *layer);
 
-void seat_set_exclusive_client(struct sway_seat *seat,
-		struct wl_client *client);
+void seat_unfocus_unless_client(struct sway_seat *seat, struct wl_client *client);
 
 struct sway_node *seat_get_focus(struct sway_seat *seat);
 
@@ -247,7 +252,7 @@ void seat_idle_notify_activity(struct sway_seat *seat,
 
 bool seat_is_input_allowed(struct sway_seat *seat, struct wlr_surface *surface);
 
-void drag_icon_update_position(struct sway_drag_icon *icon);
+void drag_icons_update_position(struct sway_seat *seat);
 
 enum wlr_edges find_resize_edge(struct sway_container *cont,
 		struct wlr_surface *surface, struct sway_cursor *cursor);
@@ -255,10 +260,13 @@ enum wlr_edges find_resize_edge(struct sway_container *cont,
 void seatop_begin_default(struct sway_seat *seat);
 
 void seatop_begin_down(struct sway_seat *seat, struct sway_container *con,
-		uint32_t time_msec, double sx, double sy);
+		double sx, double sy);
 
 void seatop_begin_down_on_surface(struct sway_seat *seat,
-		struct wlr_surface *surface, uint32_t time_msec, double sx, double sy);
+		struct wlr_surface *surface, double sx, double sy);
+
+void seatop_begin_touch_down(struct sway_seat *seat, struct wlr_surface *surface,
+		struct wlr_touch_down_event *event, double sx, double sy, double lx, double ly);
 
 void seatop_begin_move_floating(struct sway_seat *seat,
 		struct sway_container *con);
@@ -279,13 +287,13 @@ struct sway_container *seat_get_focus_inactive_floating(struct sway_seat *seat,
 		struct sway_workspace *workspace);
 
 void seat_pointer_notify_button(struct sway_seat *seat, uint32_t time_msec,
-		uint32_t button, enum wlr_button_state state);
+		uint32_t button, enum wl_pointer_button_state state);
 
 void seat_consider_warp_to_focus(struct sway_seat *seat);
 
 void seatop_button(struct sway_seat *seat, uint32_t time_msec,
 		struct wlr_input_device *device, uint32_t button,
-		enum wlr_button_state state);
+		enum wl_pointer_button_state state);
 
 void seatop_pointer_motion(struct sway_seat *seat, uint32_t time_msec);
 
@@ -318,6 +326,18 @@ void seatop_swipe_update(struct sway_seat *seat,
 void seatop_swipe_end(struct sway_seat *seat,
 		struct wlr_pointer_swipe_end_event *event);
 
+void seatop_touch_motion(struct sway_seat *seat,
+		struct wlr_touch_motion_event *event, double lx, double ly);
+
+void seatop_touch_up(struct sway_seat *seat,
+		struct wlr_touch_up_event *event);
+
+void seatop_touch_down(struct sway_seat *seat,
+		struct wlr_touch_down_event *event, double lx, double ly);
+
+void seatop_touch_cancel(struct sway_seat *seat,
+		struct wlr_touch_cancel_event *event);
+
 void seatop_rebase(struct sway_seat *seat, uint32_t time_msec);
 
 /**
@@ -331,13 +351,6 @@ void seatop_end(struct sway_seat *seat);
  * The seatop may choose to abort itself in response to this.
  */
 void seatop_unref(struct sway_seat *seat, struct sway_container *con);
-
-/**
- * Instructs a seatop to render anything that it needs to render
- * (eg. dropzone for move-tiling)
- */
-void seatop_render(struct sway_seat *seat, struct sway_output *output,
-		pixman_region32_t *damage);
 
 bool seatop_allows_set_cursor(struct sway_seat *seat);
 

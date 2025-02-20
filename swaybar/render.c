@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
 #include <assert.h>
 #include <linux/input-event-codes.h>
 #include <limits.h>
@@ -30,6 +29,7 @@ struct render_context {
 	cairo_font_options_t *textaa_sharp;
 	cairo_font_options_t *textaa_safe;
 	uint32_t background_color;
+	bool has_transparency;
 };
 
 static void choose_text_aa_mode(struct render_context *ctx, uint32_t fontcolor) {
@@ -266,6 +266,7 @@ static uint32_t render_status_block(struct render_context *ctx,
 
 	uint32_t bg_color = block->urgent
 		? config->colors.urgent_workspace.background : block->background;
+	ctx->has_transparency |= (bg_color & 0xFF) != 0xFF;
 	if (bg_color) {
 		render_sharp_rectangle(cairo, bg_color, x_pos, y_pos,
 				block_width, render_height);
@@ -575,6 +576,7 @@ static uint32_t render_binding_mode_indicator(struct render_context *ctx,
 	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
 	cairo_set_source_u32(cairo, config->colors.binding_mode.background);
 	ctx->background_color = config->colors.binding_mode.background;
+	ctx->has_transparency |= (config->colors.binding_mode.background & 0xFF) != 0xFF;
 	cairo_rectangle(cairo, x, 0, width, height);
 	cairo_fill(cairo);
 
@@ -654,6 +656,7 @@ static uint32_t render_workspace_button(struct render_context *ctx,
 	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
 	cairo_set_source_u32(cairo, box_colors.background);
 	ctx->background_color = box_colors.background;
+	ctx->has_transparency |= (box_colors.background & 0xFF) != 0xFF;
 	cairo_rectangle(cairo, *x, 0, width, height);
 	cairo_fill(cairo);
 
@@ -693,15 +696,6 @@ static uint32_t render_to_cairo(struct render_context *ctx) {
 	struct swaybar_output *output = ctx->output;
 	struct swaybar *bar = output->bar;
 	struct swaybar_config *config = bar->config;
-	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
-	if (output->focused) {
-		ctx->background_color = config->colors.focused_background;
-	} else {
-		ctx->background_color = config->colors.background;
-	}
-
-	cairo_set_source_u32(cairo, ctx->background_color);
-	cairo_paint(cairo);
 
 	int th;
 	get_text_size(cairo, config->font_description, NULL, &th, NULL, 1, false, "");
@@ -763,8 +757,19 @@ void render_frame(struct swaybar_output *output) {
 
 	free_hotspots(&output->hotspots);
 
-	struct render_context ctx = { 0 };
-	ctx.output = output;
+	uint32_t background_color;
+	if (output->focused) {
+		background_color = output->bar->config->colors.focused_background;
+	} else {
+		background_color = output->bar->config->colors.background;
+	}
+
+	struct render_context ctx = {
+		.output = output,
+		// initial background color used for deciding the best way to antialias text
+		.background_color = background_color,
+		.has_transparency = (background_color & 0xFF) != 0xFF,
+	};
 
 	cairo_surface_t *recorder = cairo_recording_surface_create(
 			CAIRO_CONTENT_COLOR_ALPHA, NULL);
@@ -774,24 +779,23 @@ void render_frame(struct swaybar_output *output) {
 	ctx.cairo = cairo;
 
 	cairo_font_options_t *fo = cairo_font_options_create();
-	cairo_font_options_set_hint_style(fo, CAIRO_HINT_STYLE_FULL);
 	cairo_font_options_set_antialias(fo, CAIRO_ANTIALIAS_GRAY);
 	ctx.textaa_safe = fo;
 	if (output->subpixel == WL_OUTPUT_SUBPIXEL_NONE) {
 		ctx.textaa_sharp = ctx.textaa_safe;
 	} else {
 		fo = cairo_font_options_create();
-		cairo_font_options_set_hint_style(fo, CAIRO_HINT_STYLE_FULL);
 		cairo_font_options_set_antialias(fo, CAIRO_ANTIALIAS_SUBPIXEL);
 		cairo_font_options_set_subpixel_order(fo,
 			to_cairo_subpixel_order(output->subpixel));
 		ctx.textaa_sharp = fo;
 	}
 
-	cairo_save(cairo);
-	cairo_set_operator(cairo, CAIRO_OPERATOR_CLEAR);
+
+	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
+	cairo_set_source_u32(cairo, background_color);
 	cairo_paint(cairo);
-	cairo_restore(cairo);
+
 	uint32_t height = render_to_cairo(&ctx);
 	int config_height = output->bar->config->height;
 	if (config_height > 0) {
@@ -836,13 +840,14 @@ void render_frame(struct swaybar_output *output) {
 		wl_surface_damage(output->surface, 0, 0,
 				output->width, output->height);
 
-		uint32_t bg_alpha = ctx.background_color & 0xFF;
-		if (bg_alpha == 0xFF) {
+		if (!ctx.has_transparency) {
 			struct wl_region *region =
 				wl_compositor_create_region(output->bar->compositor);
 			wl_region_add(region, 0, 0, INT32_MAX, INT32_MAX);
 			wl_surface_set_opaque_region(output->surface, region);
 			wl_region_destroy(region);
+		} else {
+			wl_surface_set_opaque_region(output->surface, NULL);
 		}
 
 		struct wl_callback *frame_callback = wl_surface_frame(output->surface);

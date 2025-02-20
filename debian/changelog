@@ -1,3 +1,131 @@
+sway (1.10.1-2) unstable; urgency=medium
+
+  * Move sway-backgrounds from recommends to suggests (Closes: #1014753)
+
+ -- Birger Schacht <birger@debian.org>  Tue, 04 Feb 2025 14:49:16 +0100
+
+sway (1.10.1-1) unstable; urgency=medium
+
+  * New upstream release
+  * debian/patches: add patch to disable default output setting
+    (Closes: #1014753)
+  * debian/config.d: ship a separate config file containing the output
+    setting pointing to the sway background
+  * debian/sway-backgrounds.install: ship the introduced config snipped as
+    part of the sway-backgrounds package
+  * debian/control: move polkitd from Depends to Recommends (Closes: #1028047)
+
+ -- Birger Schacht <birger@debian.org>  Sun, 26 Jan 2025 16:51:30 +0100
+
+sway (1.10-2) unstable; urgency=medium
+
+  * Reupload to unstable
+
+ -- Birger Schacht <birger@debian.org>  Thu, 26 Dec 2024 14:52:07 +0100
+
+sway (1.10-1) experimental; urgency=medium
+
+  * New upstream release
+
+ -- Birger Schacht <birger@debian.org>  Mon, 28 Oct 2024 09:01:31 +0100
+
+sway (1.10~rc4-1) experimental; urgency=medium
+
+  * New upstream release
+  * d/control: remove accidentally readded build depends
+
+ -- Birger Schacht <birger@debian.org>  Mon, 21 Oct 2024 18:14:47 +0200
+
+sway (1.10~rc3-1) experimental; urgency=medium
+
+  * New upstream release
+
+ -- Birger Schacht <birger@debian.org>  Sun, 13 Oct 2024 18:51:17 +0200
+
+sway (1.10~rc2-1) experimental; urgency=medium
+
+  * New upstream release
+
+  [ Diederik de Haas ]
+  * d/control: Set minimum libxkbcommon BD requirement.
+  * d/control: Remove unneeded Build-Depends.
+
+ -- Birger Schacht <birger@debian.org>  Mon, 07 Oct 2024 18:11:34 +0200
+
+sway (1.10~rc1-1) experimental; urgency=medium
+
+  * New upstream release.
+  * d/control: bump wlroots build dependency to 0.18
+  * d/patches: update patch to modify default configuration
+  * d/copyright: drop superfluous file pattern
+    (wlr-input-inhibitor-unstable-v1 has been dropped)
+
+ -- Birger Schacht <birger@debian.org>  Sun, 29 Sep 2024 19:41:22 +0200
+
+sway (1.9-2) unstable; urgency=medium
+
+  [ Roman Blanco ]
+  * Set compositor name in user session variable (Closes: #1077891)
+
+  [ Birger Schacht]
+  * Bump Standards-Version (no changes required)
+  * Run wrap-and-sort -ast on debian/
+
+ -- Birger Schacht <birger@debian.org>  Tue, 13 Aug 2024 20:07:40 +0200
+
+sway (1.9-1) unstable; urgency=medium
+
+  * New upstream release
+  * Add d/sway-portals.conf and add xdg-desktop-portal-gtk to Suggests
+    (Closes: #1050913)
+  * Add patch to add DesktopNames to sway.dekstop (Closes: #1021545)
+
+ -- Birger Schacht <birger@debian.org>  Sun, 25 Feb 2024 09:18:37 +0100
+
+sway (1.9~rc.4-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Birger Schacht <birger@debian.org>  Sat, 17 Feb 2024 20:29:42 +0100
+
+sway (1.9~rc.3-1) unstable; urgency=medium
+
+  * new upstream release
+
+ -- Birger Schacht <birger@debian.org>  Fri, 09 Feb 2024 21:13:37 +0100
+
+sway (1.9~rc.2-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Birger Schacht <birger@debian.org>  Mon, 05 Feb 2024 10:31:40 +0100
+
+sway (1.9~rc.1-1) unstable; urgency=medium
+
+  * New upstream release
+  * d/copyright: Bump years
+
+ -- Birger Schacht <birger@debian.org>  Fri, 26 Jan 2024 17:56:44 +0100
+
+sway (1.9~debian.2bba8a86-2) unstable; urgency=medium
+
+  * Reupload to unstable
+
+ -- Birger Schacht <birger@debian.org>  Sat, 13 Jan 2024 09:28:54 +0100
+
+sway (1.9~debian.2bba8a86-1) experimental; urgency=medium
+
+  * Upload unreleased v1.9 version for wlroots 0.17 compatibility
+    (Closes: #1058496)
+  * Update 0001-Install-zsh-completions-into-the-correct-directory.patch
+  * Update 0002-Modify-default-configuration-for-Debian.patch
+  * Drop 0003-backport-libinput-fix.patch
+  * Replace Recommends: suckless-tools with Recommends: wmenu
+  * Bump version constraints of libwayland-dev and libwlroots-dev
+  * Drop grimshot, as it was removed from the swaywm source
+
+ -- Birger Schacht <birger@debian.org>  Sat, 23 Dec 2023 11:17:49 +0100
+
 sway (1.8.1-2) unstable; urgency=medium
 
   * Upload to unstable (Closes: #1038794)

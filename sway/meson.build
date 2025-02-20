@@ -8,17 +8,17 @@ sway_sources = files(
 	'lock.c',
 	'main.c',
 	'realtime.c',
+	'scene_descriptor.c',
 	'server.c',
+	'sway_text_node.c',
 	'swaynag.c',
 	'xdg_activation_v1.c',
 	'xdg_decoration.c',
 
-	'desktop/desktop.c',
 	'desktop/idle_inhibit_v1.c',
 	'desktop/layer_shell.c',
 	'desktop/output.c',
-	'desktop/render.c',
-	'desktop/surface.c',
+	'desktop/tearing.c',
 	'desktop/transaction.c',
 	'desktop/xdg_shell.c',
 	'desktop/launcher.c',
@@ -26,7 +26,6 @@ sway_sources = files(
 	'input/input-manager.c',
 	'input/cursor.c',
 	'input/keyboard.c',
-	'input/libinput.c',
 	'input/seat.c',
 	'input/seatop_default.c',
 	'input/seatop_down.c',
@@ -43,6 +42,7 @@ sway_sources = files(
 	'config/seat.c',
 	'config/input.c',
 
+	'commands/allow_tearing.c',
 	'commands/assign.c',
 	'commands/bar.c',
 	'commands/bind.c',
@@ -87,6 +87,7 @@ sway_sources = files(
 	'commands/nop.c',
 	'commands/output.c',
 	'commands/popup_during_fullscreen.c',
+	'commands/primary_selection.c',
 	'commands/reload.c',
 	'commands/rename.c',
 	'commands/resize.c',
@@ -155,6 +156,7 @@ sway_sources = files(
 	'commands/input/accel_profile.c',
 	'commands/input/calibration_matrix.c',
 	'commands/input/click_method.c',
+	'commands/input/clickfinger_button_map.c',
 	'commands/input/drag.c',
 	'commands/input/drag_lock.c',
 	'commands/input/dwt.c',
@@ -167,9 +169,11 @@ sway_sources = files(
 	'commands/input/middle_emulation.c',
 	'commands/input/natural_scroll.c',
 	'commands/input/pointer_accel.c',
+        'commands/input/rotation_angle.c',
 	'commands/input/repeat_delay.c',
 	'commands/input/repeat_rate.c',
 	'commands/input/scroll_button.c',
+	'commands/input/scroll_button_lock.c',
 	'commands/input/scroll_factor.c',
 	'commands/input/scroll_method.c',
 	'commands/input/tap.c',
@@ -186,6 +190,7 @@ sway_sources = files(
 	'commands/input/xkb_variant.c',
 
 	'commands/output/adaptive_sync.c',
+	'commands/output/allow_tearing.c',
 	'commands/output/background.c',
 	'commands/output/disable.c',
 	'commands/output/dpms.c',
@@ -201,6 +206,7 @@ sway_sources = files(
 	'commands/output/toggle.c',
 	'commands/output/transform.c',
 	'commands/output/unplug.c',
+	'commands/output/color_profile.c',
 
 	'tree/arrange.c',
 	'tree/container.c',
@@ -221,18 +227,21 @@ sway_deps = [
 	math,
 	pango,
 	pcre2,
-	glesv2,
 	pixman,
 	threads,
 	wayland_server,
 	wlroots,
 	xkbcommon,
+	xcb,
 	xcb_icccm,
 ]
 
-if have_xwayland
+if wlroots_features['xwayland']
 	sway_sources += 'desktop/xwayland.c'
-	sway_deps += xcb
+endif
+
+if wlroots_features['libinput_backend']
+	sway_sources += 'input/libinput.c'
 endif
 
 executable(

@@ -1,0 +1,21 @@
+From 933e3e6c71b3e9ee6531d425cc16947cf7548c4b Mon Sep 17 00:00:00 2001
+From: Birger Schacht <birger@debian.org>
+Date: Sun, 25 Feb 2024 09:46:47 +0100
+Subject: [PATCH] add DesktopNames to sway.desktop
+
+---
+ sway.desktop | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/sway.desktop b/sway.desktop
+index 420db5aa..7034a296 100644
+--- a/sway.desktop
++++ b/sway.desktop
+@@ -3,3 +3,4 @@ Name=Sway
+ Comment=An i3-compatible Wayland compositor
+ Exec=sway
+ Type=Application
++DesktopNames=sway
+-- 
+2.43.0
+
